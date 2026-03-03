@@ -70,7 +70,7 @@ A minimal payment processing system that enables parents to pay school fees digi
 - The frontend server is running on http://localhost:3000.
 - The DATABASE_URL in the .env file is correctly configured.
 
-#### What You’d Improve with More Time
+#### What I’d Improve with More Time
 - Database Transactions: Implement database transactions to ensure atomicity.
 - Logging: Add comprehensive logging for better monitoring and debugging.
 - Validation: Use Pydantic for input validation to ensure data integrity.
