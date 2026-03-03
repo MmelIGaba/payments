@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from app.models.payment import Payment
 from app.utils.db import get_db_client
-from bson import ObjectId
+from psycopg2.extras import RealDictCursor
 from datetime import datetime
 
 router = APIRouter()
@@ -9,30 +9,28 @@ router = APIRouter()
 @router.post("/")
 async def create_payment(payment_request: Payment):
     db = get_db_client()
-    collection = db["payments"]
+    cursor = db.cursor(cursor_factory=RealDictCursor)
 
-    # Check for duplicate reference
-    existing_payment = collection.find_one({"reference": payment_request.reference})
+    cursor.execute("SELECT * FROM Payment WHERE reference = %s", (payment_request.reference,))
+    existing_payment = cursor.fetchone()
     if existing_payment:
-        return {"id": str(existing_payment["_id"]), "status": existing_payment["status"]}
+        return {"id": existing_payment['id'], "status": existing_payment['status']}
 
     knit_fee = payment_request.amount * 0.02
     school_amount = payment_request.amount * 0.98
 
-    payment_data = {
-        "student_id": ObjectId(payment_request.student_id),
-        "school_id": ObjectId(payment_request.school_id),
-        "amount": payment_request.amount,
-        "knit_fee": knit_fee,
-        "school_amount": school_amount,
-        "status": "SUCCESS",
-        "reference": payment_request.reference,
-        "created_at": datetime.utcnow()
-    }
+    cursor.execute("""
+        INSERT INTO Payment (student_id, school_id, amount, knit_fee, school_amount, status, reference)
+        VALUES (%s, %s, %s, %s, %s, 'SUCCESS', %s)
+        RETURNING id
+    """, (payment_request.student_id, payment_request.school_id, payment_request.amount, knit_fee, school_amount, payment_request.reference))
 
-    result = collection.insert_one(payment_data)
+    new_payment_id = cursor.fetchone()['id']
+    db.commit()
+    cursor.close()
+
     return {
-        "id": str(result.inserted_id),
+        "id": new_payment_id,
         "amount": payment_request.amount,
         "knit_fee": knit_fee,
         "school_amount": school_amount,
@@ -40,13 +38,15 @@ async def create_payment(payment_request: Payment):
     }
 
 @router.get("/{id}")
-async def get_payment(id: str):
+async def get_payment(id: int):
     db = get_db_client()
-    collection = db["payments"]
+    cursor = db.cursor(cursor_factory=RealDictCursor)
 
-    payment = collection.find_one({"_id": ObjectId(id)})
+    cursor.execute("SELECT * FROM Payment WHERE id = %s", (id,))
+    payment = cursor.fetchone()
+    cursor.close()
+
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
 
-    payment["id"] = str(payment["_id"])
     return payment

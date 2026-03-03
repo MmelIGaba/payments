@@ -1,23 +1,24 @@
 from fastapi import APIRouter, HTTPException
 from app.utils.db import get_db_client
-from bson import ObjectId
+from psycopg2.extras import RealDictCursor
 
 router = APIRouter()
 
 @router.get("/{id}/revenue")
-async def get_school_revenue(id: str):
+async def get_school_revenue(id: int):
     db = get_db_client()
-    collection = db["payments"]
+    cursor = db.cursor(cursor_factory=RealDictCursor)
 
-    pipeline = [
-        {"$match": {"school_id": ObjectId(id)}},
-        {"$group": {
-            "_id": None,
-            "total_collected": {"$sum": "$amount"},
-            "total_knit_fees": {"$sum": "$knit_fee"},
-            "total_paid_to_school": {"$sum": "$school_amount"}
-        }}
-    ]
+    cursor.execute("""
+        SELECT SUM(amount) AS total_collected, SUM(knit_fee) AS total_knit_fees, SUM(school_amount) AS total_paid_to_school
+        FROM Payment
+        WHERE school_id = %s
+    """, (id,))
 
-    result = collection.aggregate(pipeline).next()
-    return result
+    revenue = cursor.fetchone()
+    cursor.close()
+
+    if not revenue:
+        raise HTTPException(status_code=404, detail="No revenue data found")
+
+    return revenue

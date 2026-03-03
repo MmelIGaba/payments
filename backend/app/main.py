@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from app.routes import payments, schools, students
-from app.utils.db import get_db_client
 
 app = FastAPI()
 
